@@ -1,0 +1,211 @@
+#!/bin/bash -u
+###########################################################
+REALM='FNAL.GOV'
+DEFAULT_SERVICES='host'
+KEYTAB='/etc/krb5.keytab'
+NODENAME=$(hostname)
+PASSWORD=""
+
+###########################################################
+###########################################################
+usage() {
+    echo ''           >&2
+    echo "$0 [-r realm] [-n nodename] [-p password] [-k keytab] [-s service] [-s service]"   >&2
+    echo "   Create keytab for a given host in the ${REALM} Kerberos Realm"                  >&2
+    echo ''                                    >&2
+    echo '  -h print this usage help'          >&2
+    echo '  -p specify the password'           >&2
+    echo '  -n specify the node name'          >&2
+    echo "       detected: ${NODENAME}"        >&2
+    echo '  -s Kerberos service name'          >&2
+    echo "       Default: ${DEFAULT_SERVICES}" >&2
+    echo '  -k Specify file to write out'      >&2
+    echo "       Default: ${KEYTAB}"           >&2
+    echo '  -r Specify the kerberos realm'     >&2
+    echo "       Default: ${REALM}"            >&2
+    echo ''                                    >&2
+    echo '  Examples:'                         >&2
+    echo "   $0 -n myhost.fnal.gov -s ftp -s host -p password -k myfile"   >&2
+    echo "   $0 -n myhost.fnal.gov -s ftp -s host -p password"             >&2
+    echo "   $0 -n myhost.fnal.gov -s host -p password"                    >&2
+    echo "   $0 -n myhost.fnal.gov -p password"                            >&2
+    echo "   $0 -n myhost.fnal.gov -s host"                                >&2
+    echo "   $0 -n myhost.fnal.gov -s host -s ftp"                         >&2
+    echo "   $0 -n myhost.fnal.gov -s host -s HTTP"                        >&2
+    echo "   $0 -r CERN.ch -n myhost.fnal.gov -s user/example"             >&2
+    echo "   $0 -n myhost.fnal.gov"                                        >&2
+    echo "   $0 -s ftp"                                                    >&2
+    echo "   $0 -p \$(cat password.txt)"                                   >&2
+    echo "   $0 -p password"                                               >&2
+    exit 1
+}
+
+###########################################################
+verifynodename() {
+    echo "Generating keytab for: ${NODENAME}"
+    echo -n " Is this correct? (y/n default n) "
+    read answer
+    case ${answer} in
+        y | Y | yes | YES | Yes )
+            return
+            ;;
+        *)
+            echo -n "Enter correct hostname (ie myhost.fnal.gov) : "
+            read NODENAME
+            verifynodename
+            ;;
+    esac
+}
+
+###########################################################
+getpassword() {
+    echo "A password is required for creating the ${SERVICES} principal(s)?"
+	    echo -n "  Do you have it? (y/n, default y) "
+    read answer
+    case ${answer} in
+        n | N | no | NO | No )
+            echo "Please contact Service Desk for this information" >&2
+            exit 1
+            ;;
+    esac
+    echo -n "Please enter the password: "
+    read PASSWORD
+    if [[ "x${PASSWORD}" == 'x' ]]; then
+        echo "No password entered, please try again"
+        getpassword
+    fi
+}
+
+###########################################################
+add_service() {
+    SERVICENAME=$1
+    SERVICEPRINCIPLE="${SERVICENAME}/${NODENAME}@${REALM}"
+    echo ''
+    echo "Running : kadmin -r ${REALM} -p ${SERVICEPRINCIPLE} -w ${PASSWORD} -q 'ktadd -k ${KEYTAB} ${SERVICEPRINCIPLE}'"
+    kadmin -r ${REALM} -p ${SERVICEPRINCIPLE} -w ${PASSWORD} -q "ktadd -k ${KEYTAB} ${SERVICEPRINCIPLE}"
+    if [[ $? -eq 0 ]]; then
+        logger -t Kerberos -p auth.notice "Created principle for ${SERVICEPRINCIPLE}"
+    else
+        logger -t Kerberos -p auth.warning "Didn't create principle for ${SERVICEPRINCIPLE}"
+    fi
+}
+
+###########################################################
+# setup args in the right order for making getopt evaluation
+# nice and easy.  You'll need to read the manpages for more info
+args=$(getopt -o hr:n:p:k:s: -- "$@")
+if [[ $? -ne 0 ]]; then
+    usage
+fi
+eval set -- "$args"
+
+SETHOSTNAME='False'
+SERVICES=""
+for arg in $@; do
+    case $1 in
+        -- )
+            # end of getopt args, shift off the -- and get out of the loop
+            shift
+            break 2
+           ;;
+         -r )
+            REALM=$2
+            shift
+            shift
+           ;;
+         -n )
+            NODENAME=$2
+            SETHOSTNAME='True'
+            shift
+            shift
+           ;;
+         -p )
+            PASSWORD=$2
+            shift
+            shift
+           ;;
+         -k )
+            KEYTAB=$2
+            shift
+            shift
+           ;;
+         -s )
+            SERVICES="${SERVICES} $2"
+            shift
+            shift
+           ;;
+         -h )
+            # get help
+            usage
+           ;;
+    esac
+done
+
+which kadmin >/dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Could not find 'kadmin'" >&2
+    echo "Consider installing krb5-workstation" >&2
+    exit 2
+fi
+which ktutil >/dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Could not find 'ktutil'" >&2
+    echo "Consider installing krb5-workstation" >&2
+    exit 2
+fi
+which logger >/dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Could not find 'logger'" >&2
+    echo "Consider installing util-linux" >&2
+    exit 2
+fi
+
+if [[ -f ${KEYTAB} ]]; then
+    if [[ ! -w ${KEYTAB} ]]; then
+        echo "Cannot write to '${KEYTAB}'" >&2
+        exit 2
+    elif [[ ! -s ${KEYTAB} ]]; then
+        # zero byte files are not valid keytabs
+        # echo -e "\0005\0002\c" | tr -d '\012' >${KEYTAB}
+        rm -f ${KEYTAB}
+    fi
+else
+    touch ${KEYTAB} >&2
+    if [[ ! -f ${KEYTAB} ]]; then
+        echo "Cannot create '${KEYTAB}'" >&2
+        exit 2
+    fi
+    # clean up invalid keytab file, we just made it to test read/write anyway
+    rm -f ${KEYTAB}
+fi
+
+####################################################
+
+if [[ "x$SERVICES" == 'x' ]]; then
+    SERVICES="${DEFAULT_SERVICES}"
+fi
+
+if [[ "${SETHOSTNAME}" == 'False' ]]; then
+    verifynodename
+fi
+
+if [[ "x$PASSWORD" == 'x' ]]; then
+    getpassword
+fi
+
+for THISONE in ${SERVICES}; do
+    add_service ${THISONE}
+done
+
+if [[ -f ${KEYTAB} ]]; then
+    # If file exists
+    if [[ -s ${KEYTAB} ]]; then
+        # If file has content (of any kind)
+        restorecon -F ${KEYTAB} >/dev/null 2>&1
+        chmod 600 ${KEYTAB}
+
+        # show the content in a useful way
+        klist -ek ${KEYTAB}
+    fi
+fi
+
