@@ -70,7 +70,7 @@ getpassword() {
     esac
     echo -n "Please enter the password: "
     read -r PASSWORD
-    if [[ "x${PASSWORD}" == 'x' ]]; then
+    if [[ "${PASSWORD}" == '' ]]; then
         echo "No password entered, please try again"
         getpassword
     fi
@@ -141,20 +141,17 @@ for arg in $@; do
     esac
 done
 
-which kadmin >/dev/null 2>&1
-if [[ $? -ne 0 ]]; then
+if ! which kadmin >/dev/null 2>&1; then
     echo "Could not find 'kadmin'" >&2
     echo "Consider installing krb5-workstation" >&2
     exit 2
 fi
-which ktutil >/dev/null 2>&1
-if [[ $? -ne 0 ]]; then
+if ! which ktutil >/dev/null 2>&1; then
     echo "Could not find 'ktutil'" >&2
     echo "Consider installing krb5-workstation" >&2
     exit 2
 fi
-which logger >/dev/null 2>&1
-if [[ $? -ne 0 ]]; then
+if ! which logger >/dev/null 2>&1; then
     echo "Could not find 'logger'" >&2
     echo "Consider installing util-linux" >&2
     exit 2
@@ -181,7 +178,7 @@ fi
 
 ####################################################
 
-if [[ "x${SERVICES}" == 'x' ]]; then
+if [[ "${SERVICES}" == '' ]]; then
     SERVICES="${DEFAULT_SERVICES}"
 fi
 
@@ -189,7 +186,7 @@ if [[ "${SETHOSTNAME}" == 'False' ]]; then
     verifynodename
 fi
 
-if [[ "x${PASSWORD}" == 'x' ]]; then
+if [[ "${PASSWORD}" == '' ]]; then
     getpassword
 fi
 
