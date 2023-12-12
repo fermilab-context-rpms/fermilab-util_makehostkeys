@@ -3,7 +3,7 @@
 REALM='FNAL.GOV'
 DEFAULT_SERVICES='host'
 KEYTAB='/etc/krb5.keytab'
-NODENAME=$(hostname)
+NODENAME=$(hostname --fqdn)
 PASSWORD=""
 
 ###########################################################
