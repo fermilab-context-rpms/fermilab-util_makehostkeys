@@ -1,5 +1,5 @@
 Name:		fermilab-util_makehostkeys
-Version:	1.2
+Version:	1.3
 Release:	1%{?dist}
 Summary:	A utility for generating keytabs
 
@@ -42,6 +42,9 @@ bash -n %{buildroot}%{_sbindir}/makehostkeys
 
 
 %changelog
+* Tue Dec 12 2023 Pat Riehecky <riehecky@fnal.gov> 1.3-1
+- Update to use hostname --fqdn per RITM1946472
+
 * Thu Sep 21 2023 Pat Riehecky <riehecky@fnal.gov> 1.2-1
 - Run through shellcheck and shfmt
 
